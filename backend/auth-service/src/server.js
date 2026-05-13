@@ -1,12 +1,12 @@
 const express = require('express');
 const mongoose = require('mongoose');
-const bosyParser = require('body-parser');
+const bodyParser = require('body-parser');
 
 const app = express();
 
 const authRoutes = require('./routes/auth-routes');
 
-app.use(bosyParser.json());
+app.use(bodyParser.json());
 
 // header for CORS error
 app.use((req, res, next) => {
