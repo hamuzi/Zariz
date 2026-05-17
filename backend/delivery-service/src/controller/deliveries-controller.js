@@ -1,259 +1,266 @@
-const mongoose = require('mongoose');
+const Delivery = require('../models/Delivery');
 
-const Delivery = require('../models/delivery');
-
-const createFields = [
-  'pickupAddress',
-  'dropoffAddress',
-  'customerName',
-  'customerPhone',
-  'price',
-  'notes'
-];
-
-const businessUpdateFields = [
-  'pickupAddress',
-  'dropoffAddress',
-  'customerName',
-  'customerPhone',
-  'price',
-  'notes',
-  'status'
-];
-
-const driverStatusTransitions = {
-  ASSIGNED: 'PICKED_UP',
-  PICKED_UP: 'ON_THE_WAY',
-  ON_THE_WAY: 'DELIVERED'
-};
-
-const buildAllowedData = (source, allowedFields) => {
-  const data = {};
-
-  allowedFields.forEach(field => {
-    if (Object.prototype.hasOwnProperty.call(source, field)) {
-      data[field] = source[field];
-    }
-  });
-
-  return data;
-};
-
-const createError = (message, statusCode) => {
-  const error = new Error(message);
-  error.statusCode = statusCode;
-  return error;
-};
-
-const ensureValidId = id => {
-  if (!mongoose.Types.ObjectId.isValid(id)) {
-    throw createError('Invalid delivery id.', 400);
-  }
-};
-
-const ensureActiveDriver = user => {
-  if (!user.isActive) {
-    throw createError('Only active drivers can access this resource.', 403);
-  }
-};
-
-const isOwnerBusiness = (delivery, userId) => {
-  return delivery.businessId && delivery.businessId.toString() === userId;
-};
-
-const isAssignedDriver = (delivery, userId) => {
-  return delivery.driverId && delivery.driverId.toString() === userId;
-};
-
-const normalizeError = err => {
-  if (err.name === 'ValidationError') {
-    err.statusCode = 422;
+exports.getMyDeliveries = (req, res, next) => {
+  const userId = req.user.id;
+  if (!userId) {
+    const error = new Error('User ID not found in token.');
+    error.statusCode = 401;
+    return next(error);
   }
 
-  if (!err.statusCode) {
-    err.statusCode = 500;
-  }
-
-  return err;
-};
-
-exports.getAllDeliveries = (req, res, next) => {
-  let filter = null;
-
-  if (req.user.role === 'BUSINESS') {
-    filter = { businessId: req.user.id };
-  } else if (req.user.role === 'DRIVER') {
-    try {
-      ensureActiveDriver(req.user);
-    } catch (err) {
-      return next(normalizeError(err));
-    }
-
-    filter = { status: 'READY_FOR_PICKUP', driverId: null };
-  } else {
-    return next(createError('Access denied.', 403));
-  }
-
-  Delivery.find(filter)
-    .sort({ createdAt: -1 })
+  Delivery.find({ businessId: userId })
     .then(deliveries => {
-      res.status(200).json({ deliveries: deliveries });
+      res.status(200).json({
+        message: 'Deliveries retrieved successfully', 
+        deliveries: deliveries });
     })
     .catch(err => {
-      next(normalizeError(err));
+      if (err.name === 'ValidationError' || err.name === 'CastError') {
+        err.statusCode = 422;
+      }
+      next(err);
+    });
+};  
+
+exports.getAllDeliveries = (req, res, next) => {
+  if (!req.user.isActive) {
+    const error = new Error('Only active drivers can access this resource.');
+    error.statusCode = 403;
+    return next(error);
+  }
+
+  Delivery.find({ status: 'READY_FOR_PICKUP' ,driverId: null})
+    .then(deliveries => {
+      if (deliveries.length === 0) {
+        return res.status(200).json({
+          message: 'No deliveries available for pickup.',
+          deliveries: []
+        });
+      }
+      res.status(200).json({
+        message: 'Deliveries retrieved successfully', 
+        deliveries: deliveries });
+    })
+    .catch(err => {
+      if (err.name === 'ValidationError' || err.name === 'CastError') {
+        err.statusCode = 422;
+      }
+      next(err);
     });
 };
 
 exports.createDelivery = (req, res, next) => {
-  if (!req.user || !req.user.id) {
-    return next(createError('Authentication required.', 401));
-  }
+  const pickupAddress = req.body.pickupAddress;
+  const dropoffAddress = req.body.dropoffAddress;
+  const customerName = req.body.customerName;
+  const customerPhone = req.body.customerPhone;
+  const price = req.body.price;
+  const notes = req.body.notes;
 
-  const deliveryData = buildAllowedData(req.body, createFields);
-  deliveryData.businessId = req.user.id;
+  const delivery = new Delivery({
+    businessId: req.user.id,
+    pickupAddress: pickupAddress,
+    dropoffAddress: dropoffAddress,
+    customerName: customerName,
+    customerPhone: customerPhone,
+    price: price,
+    notes: notes
+  });
 
-  const delivery = new Delivery(deliveryData);
-
-  delivery.save()
+  delivery
+    .save()
     .then(result => {
       res.status(201).json({
-        message: 'Delivery created successfully.',
+        message: 'Delivery created successfully!',
         delivery: result
       });
     })
     .catch(err => {
-      next(normalizeError(err));
+      if (err.name === 'ValidationError' || err.name === 'CastError') {
+        err.statusCode = 422;
+      }
+      next(err);
     });
 };
 
-exports.getDeliveryById = (req, res, next) => {
-  try {
-    ensureValidId(req.params.id);
-  } catch (err) {
-    return next(normalizeError(err));
-  }
+exports.getMyDeliveryById = (req, res, next) => {
+  const deliveryId = req.params.id;
 
-  Delivery.findById(req.params.id)
+  Delivery.findOne({ _id: deliveryId, businessId: req.user.id })
     .then(delivery => {
       if (!delivery) {
-        throw createError('Delivery not found.', 404);
-      }
-
-      if (req.user.role === 'BUSINESS') {
-        if (!isOwnerBusiness(delivery, req.user.id)) {
-          throw createError('Access denied.', 403);
-        }
-      } else if (req.user.role === 'DRIVER') {
-        ensureActiveDriver(req.user);
-
-        const isReadyForClaim =
-          delivery.status === 'READY_FOR_PICKUP' && delivery.driverId === null;
-
-        if (!isReadyForClaim && !isAssignedDriver(delivery, req.user.id)) {
-          throw createError('Access denied.', 403);
-        }
-      } else {
-        throw createError('Access denied.', 403);
+        const error = new Error('Delivery not found.');
+        error.statusCode = 404;
+        throw error;
       }
 
       res.status(200).json({ delivery: delivery });
     })
     .catch(err => {
-      next(normalizeError(err));
+      if (err.name === 'ValidationError' || err.name === 'CastError') {
+        err.statusCode = 422;
+      }
+      next(err);
+    });
+};
+
+exports.getDriverDeliveryById = (req, res, next) => {
+  const deliveryId = req.params.id;
+
+  if (!req.user.isActive) {
+    const error = new Error('Only active drivers can access this resource.');
+    error.statusCode = 403;
+    return next(error);
+  }
+
+  Delivery.findById(deliveryId)
+    .then(delivery => {
+      if (!delivery) {
+        const error = new Error('Delivery not found.');
+        error.statusCode = 404;
+        throw error;
+      }
+
+      res.status(200).json({ delivery: delivery });
+    })
+    .catch(err => {
+      if (err.name === 'ValidationError' || err.name === 'CastError') {
+        err.statusCode = 422;
+      }
+      next(err);
     });
 };
 
 exports.updateDelivery = (req, res, next) => {
-  try {
-    ensureValidId(req.params.id);
-  } catch (err) {
-    return next(normalizeError(err));
-  }
+  const deliveryId = req.params.id;
+  const pickupAddress = req.body.pickupAddress;
+  const dropoffAddress = req.body.dropoffAddress;
+  const customerName = req.body.customerName;
+  const customerPhone = req.body.customerPhone;
+  const price = req.body.price;
+  const notes = req.body.notes;
+  const status = req.body.status;
 
-  const updateData = buildAllowedData(req.body, businessUpdateFields);
-
-  Delivery.findById(req.params.id)
+  Delivery.findById(deliveryId)
     .then(delivery => {
       if (!delivery) {
-        throw createError('Delivery not found.', 404);
+        const error = new Error('Delivery not found.');
+        error.statusCode = 404;
+        throw error;
       }
 
-      if (!isOwnerBusiness(delivery, req.user.id)) {
-        throw createError('Access denied.', 403);
+      if (!delivery.businessId || delivery.businessId.toString() !== req.user.id) {
+        const error = new Error('Access denied.');
+        error.statusCode = 403;
+        throw error;
       }
 
       if (delivery.driverId !== null) {
-        throw createError('Claimed deliveries cannot be updated by the business.', 403);
+        const error = new Error('Claimed deliveries cannot be updated.');
+        error.statusCode = 403;
+        throw error;
       }
 
-      if (Object.prototype.hasOwnProperty.call(updateData, 'status')) {
-        const isValidBusinessStatusUpdate =
-          delivery.status === 'CREATED' && updateData.status === 'READY_FOR_PICKUP';
+      if (pickupAddress !== undefined) {
+        delivery.pickupAddress = pickupAddress;
+      }
 
-        if (!isValidBusinessStatusUpdate) {
-          throw createError('Business can only change status from CREATED to READY_FOR_PICKUP.', 422);
+      if (dropoffAddress !== undefined) {
+        delivery.dropoffAddress = dropoffAddress;
+      }
+
+      if (customerName !== undefined) {
+        delivery.customerName = customerName;
+      }
+
+      if (customerPhone !== undefined) {
+        delivery.customerPhone = customerPhone;
+      }
+
+      if (price !== undefined) {
+        delivery.price = price;
+      }
+
+      if (notes !== undefined) {
+        delivery.notes = notes;
+      }
+
+      if (status !== undefined) {
+        if (delivery.status !== 'CREATED' || status !== 'READY_FOR_PICKUP') {
+          const error = new Error('Business can only change status from CREATED to READY_FOR_PICKUP.');
+          error.statusCode = 422;
+          throw error;
         }
-      }
 
-      Object.keys(updateData).forEach(field => {
-        delivery[field] = updateData[field];
-      });
+        delivery.status = status;
+      }
 
       return delivery.save();
     })
-    .then(updatedDelivery => {
+    .then(result => {
       res.status(200).json({
-        message: 'Delivery updated successfully.',
-        delivery: updatedDelivery
+        message: 'Delivery updated successfully!',
+        delivery: result
       });
     })
     .catch(err => {
-      next(normalizeError(err));
+      if (err.name === 'ValidationError' || err.name === 'CastError') {
+        err.statusCode = 422;
+      }
+      next(err);
     });
 };
 
 exports.deleteDelivery = (req, res, next) => {
-  try {
-    ensureValidId(req.params.id);
-  } catch (err) {
-    return next(normalizeError(err));
-  }
+  const deliveryId = req.params.id;
 
-  Delivery.findById(req.params.id)
+  Delivery.findById(deliveryId)
     .then(delivery => {
       if (!delivery) {
-        throw createError('Delivery not found.', 404);
+        const error = new Error('Delivery not found.');
+        error.statusCode = 404;
+        throw error;
       }
 
-      if (!isOwnerBusiness(delivery, req.user.id)) {
-        throw createError('Access denied.', 403);
+      if (!delivery.businessId || delivery.businessId.toString() !== req.user.id) {
+        const error = new Error('Access denied.');
+        error.statusCode = 403;
+        throw error;
       }
 
       if (delivery.driverId !== null) {
-        throw createError('Claimed deliveries cannot be deleted by the business.', 403);
+        const error = new Error('Claimed deliveries cannot be deleted.');
+        error.statusCode = 403;
+        throw error;
       }
 
-      return Delivery.findByIdAndDelete(req.params.id);
+      return Delivery.findByIdAndDelete(deliveryId);
     })
     .then(() => {
-      res.status(200).json({ message: 'Delivery deleted successfully.' });
+      res.status(200).json({ 
+        message: 'Delivery deleted successfully! with id: ' + deliveryId
+      });
     })
     .catch(err => {
-      next(normalizeError(err));
+      if (err.name === 'ValidationError' || err.name === 'CastError') {
+        err.statusCode = 422;
+      }
+      next(err);
     });
 };
 
 exports.claimDelivery = (req, res, next) => {
-  try {
-    ensureValidId(req.params.id);
-    ensureActiveDriver(req.user);
-  } catch (err) {
-    return next(normalizeError(err));
+  const deliveryId = req.params.id;
+
+  if (!req.user.isActive) {
+    const error = new Error('Only active drivers can claim deliveries.');
+    error.statusCode = 403;
+    return next(error);
   }
 
   Delivery.findOneAndUpdate(
     {
-      _id: req.params.id,
+      _id: deliveryId,
       status: 'READY_FOR_PICKUP',
       driverId: null
     },
@@ -269,66 +276,88 @@ exports.claimDelivery = (req, res, next) => {
   )
     .then(delivery => {
       if (delivery) {
-        res.status(200).json({
-          message: 'Delivery claimed successfully.',
+        return res.status(200).json({
+          message: 'Delivery claimed successfully!',
           delivery: delivery
         });
-        return null;
       }
 
-      return Delivery.findById(req.params.id).then(existingDelivery => {
+      return Delivery.findById(deliveryId).then(existingDelivery => {
         if (!existingDelivery) {
-          throw createError('Delivery not found.', 404);
+          const error = new Error('Delivery not found.');
+          error.statusCode = 404;
+          throw error;
         }
 
-        throw createError('Delivery is no longer available for claim.', 409);
+        const error = new Error('Delivery is no longer available for claim.');
+        error.statusCode = 409;
+        throw error;
       });
     })
     .catch(err => {
-      next(normalizeError(err));
+      if (err.name === 'ValidationError' || err.name === 'CastError') {
+        err.statusCode = 422;
+      }
+      next(err);
     });
 };
 
 exports.updateDeliveryStatus = (req, res, next) => {
-  try {
-    ensureValidId(req.params.id);
-    ensureActiveDriver(req.user);
-  } catch (err) {
-    return next(normalizeError(err));
+  const deliveryId = req.params.id;
+  const status = req.body.status;
+
+  if (!req.user.isActive) {
+    const error = new Error('Only active drivers can update delivery status.');
+    error.statusCode = 403;
+    return next(error);
   }
 
-  const nextStatus = req.body.status;
-
-  if (!nextStatus) {
-    return next(createError('Status is required.', 422));
+  if (!status) {
+    const error = new Error('Status is required.');
+    error.statusCode = 422;
+    return next(error);
   }
 
-  Delivery.findById(req.params.id)
+  Delivery.findById(deliveryId)
     .then(delivery => {
       if (!delivery) {
-        throw createError('Delivery not found.', 404);
+        const error = new Error('Delivery not found.');
+        error.statusCode = 404;
+        throw error;
       }
 
-      if (!isAssignedDriver(delivery, req.user.id)) {
-        throw createError('Access denied.', 403);
+      if (!delivery.driverId || delivery.driverId.toString() !== req.user.id) {
+        const error = new Error('Access denied.');
+        error.statusCode = 403;
+        throw error;
       }
 
-      const expectedNextStatus = driverStatusTransitions[delivery.status];
-
-      if (!expectedNextStatus || nextStatus !== expectedNextStatus) {
-        throw createError('Invalid delivery status transition.', 422);
+      if (
+        (delivery.status === 'ASSIGNED' && status !== 'PICKED_UP') ||
+        (delivery.status === 'PICKED_UP' && status !== 'ON_THE_WAY') ||
+        (delivery.status === 'ON_THE_WAY' && status !== 'DELIVERED') ||
+        (delivery.status !== 'ASSIGNED' &&
+          delivery.status !== 'PICKED_UP' &&
+          delivery.status !== 'ON_THE_WAY')
+      ) {
+        const error = new Error('Invalid delivery status transition.');
+        error.statusCode = 422;
+        throw error;
       }
 
-      delivery.status = nextStatus;
+      delivery.status = status;
       return delivery.save();
     })
-    .then(updatedDelivery => {
+    .then(result => {
       res.status(200).json({
-        message: 'Delivery status updated successfully.',
-        delivery: updatedDelivery
+        message: 'Delivery status updated successfully!',
+        delivery: result
       });
     })
     .catch(err => {
-      next(normalizeError(err));
+      if (err.name === 'ValidationError' || err.name === 'CastError') {
+        err.statusCode = 422;
+      }
+      next(err);
     });
 };

@@ -5,7 +5,6 @@ exports.requireRole = (...roles) => {
         message: "Access denied",
       });
     }
-
     next();
   };
 };

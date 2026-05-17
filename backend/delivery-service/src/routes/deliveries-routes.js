@@ -4,14 +4,36 @@ const authMiddleware = require('../middleware/auth');
 const roleMiddleware = require('../middleware/role');
 const deliveriesController = require('../controller/deliveries-controller');
 
-router.get('/', authMiddleware.requireAuth, deliveriesController.getAllDeliveries);
+router.get(
+  '/me',
+  authMiddleware.requireAuth,
+  roleMiddleware.requireRole('BUSINESS'),
+  deliveriesController.getMyDeliveries
+);
+router.get(
+  '/all',
+  authMiddleware.requireAuth,
+  roleMiddleware.requireRole('DRIVER'),
+  deliveriesController.getAllDeliveries
+);
+router.get(
+  '/me/:id',
+  authMiddleware.requireAuth,
+  roleMiddleware.requireRole('BUSINESS'),
+  deliveriesController.getMyDeliveryById
+);
+router.get(
+  '/all/:id',
+  authMiddleware.requireAuth,
+  roleMiddleware.requireRole('DRIVER'),
+  deliveriesController.getDriverDeliveryById
+);
 router.post(
   '/',
   authMiddleware.requireAuth,
   roleMiddleware.requireRole('BUSINESS'),
   deliveriesController.createDelivery
 );
-router.get('/:id', authMiddleware.requireAuth, deliveriesController.getDeliveryById);
 router.put(
   '/:id',
   authMiddleware.requireAuth,
