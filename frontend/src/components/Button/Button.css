@@ -1,0 +1,45 @@
+.button {
+  border: none;
+  border-radius: 999px;
+  padding: 0.72rem 1.2rem;
+  font-weight: 700;
+  transition:
+    transform 0.2s ease,
+    box-shadow 0.2s ease,
+    background 0.2s ease;
+}
+
+.button:hover:not(:disabled) {
+  transform: translateY(-1px);
+}
+
+.button:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.button--raised {
+  background: var(--color-brand);
+  color: #fff;
+  box-shadow: 0 12px 28px rgba(15, 118, 110, 0.18);
+}
+
+.button--flat {
+  background: transparent;
+  color: var(--color-brand-dark);
+}
+
+.button--ghost {
+  background: #edf8f7;
+  color: var(--color-brand-dark);
+}
+
+.button--accent {
+  background: var(--color-accent);
+  color: #fff;
+}
+
+.button--danger {
+  background: #fff1eb;
+  color: var(--color-danger);
+}

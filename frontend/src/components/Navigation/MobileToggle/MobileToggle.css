@@ -1,0 +1,12 @@
+.mobile-toggle {
+  display: inline-grid;
+  gap: 4px;
+}
+
+.mobile-toggle span {
+  display: block;
+  width: 20px;
+  height: 2px;
+  background: var(--color-ink);
+  border-radius: 999px;
+}

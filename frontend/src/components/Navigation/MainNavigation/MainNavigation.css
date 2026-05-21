@@ -1,0 +1,44 @@
+.main-navigation {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 1rem min(3vw, 2rem);
+  background: rgba(255, 255, 255, 0.8);
+  border-bottom: 1px solid rgba(216, 224, 235, 0.8);
+  backdrop-filter: blur(12px);
+}
+
+.main-navigation__brand {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+}
+
+.main-navigation__brand p {
+  margin: 0;
+  font-size: 1.2rem;
+  font-weight: 800;
+}
+
+.main-navigation__brand span {
+  color: var(--color-muted);
+  font-size: 0.92rem;
+}
+
+.main-navigation__mobile-button {
+  display: none;
+  border: none;
+  background: transparent;
+  padding: 0;
+}
+
+@media (max-width: 768px) {
+  .main-navigation__mobile-button {
+    display: inline-flex;
+  }
+
+  .main-navigation__items {
+    display: none;
+  }
+}

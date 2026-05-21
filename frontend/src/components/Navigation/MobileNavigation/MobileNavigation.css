@@ -1,0 +1,22 @@
+.mobile-nav {
+  position: fixed;
+  top: 0;
+  left: -320px;
+  z-index: 70;
+  width: 280px;
+  height: 100vh;
+  padding: 6rem 1rem 1rem;
+  background: #fff;
+  box-shadow: 20px 0 40px rgba(23, 32, 51, 0.14);
+  transition: left 0.25s ease;
+}
+
+.mobile-nav--open {
+  left: 0;
+}
+
+@media (min-width: 769px) {
+  .mobile-nav {
+    display: none;
+  }
+}

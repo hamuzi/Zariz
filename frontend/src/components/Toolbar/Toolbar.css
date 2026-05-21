@@ -1,0 +1,4 @@
+.toolbar {
+  width: min(1120px, calc(100% - 1rem));
+  margin: 0 auto;
+}
